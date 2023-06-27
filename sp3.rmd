@@ -1,0 +1,32 @@
+---
+title: "Analiza danych - sprawozdanie 3"
+author:
+  name: Adrian Kowalski
+  affiliation: Politechnika Krakowska
+subtitle: Korelacja
+output:
+  html_document:
+    df_print: paged
+---
+
+# Zadanie
+
+W pliku *sp3.csv* znajdują się dane dotyczące ilości tweetów napisanych przez prezesa pewnej firmy danego dnia oraz cenę otwarcia akcji tej firmy tego dnia. Czy cena otwarcia ma wpływ na ilość tweetow? Jeżeli tak to jaki? Sprawdź istotność statystyczną współczynnika korelacji na poziomie istotności $\alpha=0.05$ za pomocą metody parametrycznej. Wyznacz przedział ufności za pomocą metody bootstrap oraz wykonaj test permutacyjny. Porównaj otrzymane wyniki.
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+data <- read_csv('sp3.csv')
+head(data)
+```
+
+
+
+
+
+
+
+
