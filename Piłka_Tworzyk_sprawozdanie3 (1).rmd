@@ -1,0 +1,113 @@
+---
+title: "Regresja i analiza wariancji - Sprawozdanie 3"
+subtitle: 'Metody klasyfikacji - sprawozdanie' 
+author: 
+  name: 'Adrian Kowalski'
+  affiliation: 'Politechnika Krakowska'
+output: html_notebook
+---
+
+# Termin oddania : Czwartek 26.01.2023 23:59
+
+# Zadanie
+
+W pliku 'banknotes.csv' znadjują się dane opisujące obrazy banknotów. Dane powstały poprzez transformatę falową (wavelett transform) zastosowaną do obrazów w skali szarości rozmiaru 400x400 pikseli. Po zastosowaniu transformaty wyliczono cztery charakterystyki liczbowe obrazu - wariancję, skośność, kurtozę oraz entropię. 
+
+Za pomocą modelu regresji logistycznej sprawdź czy za pomocą tej metody jesteśmy w stanie dobrze odróżnić banknoty prawdziwe od fałszywych. 
+
+ - Zbuduj i zinterpretuj model regresji logistycznej (w razie otrzymania ostrzeżenia od software'u stosownie należy je skomentować, ale się nim nie przejmować).
+ - Zbadaj i zinterpretuj jego charakterystyki liczbowe za pomocą macierzy pomyłek.
+*Wyrysuj krzywą ROC otrzymanego modelu i podaj AUC. Zinterpretuj otrzymane wyniki.
+
+```{r}
+library(tidyverse)
+library(caret)
+library(ggfortify)
+```
+Wczytujemy dane:
+
+```{r}
+bank <- readr::read_csv('banknote.csv', col_names = FALSE)
+```
+
+Zmieniamy nazwy kolumn aby dane były czytelniejsze:
+
+```{r}
+names(bank) <- c('var', 'skew', 'curt', 'ent', 'class')
+```
+
+
+
+```{r}
+
+summary(bank)
+
+any(is.na(bank))
+
+```
+
+Nie mamy braków danych. Zmienną objaśnianą będzie zmienna 'class'.
+
+Przechodzimy do stworzenia zbioru treningowego i testowego.
+
+
+```{r}
+train_test_split <- createDataPartition(bank$class, list = FALSE, p=0.75)
+bank_train <- bank[train_test_split,]
+bank_test <- bank[-train_test_split,]
+cat(dim(bank_train),dim(bank_test))
+```
+Model regresji logistycznej:
+
+```{r}
+model = glm(class ~., data = bank_train, family = 'binomial')
+
+summary(model)
+```
+Macierz pomyłek:
+
+```{r}
+fmpreds <- predict(model, bank_test, type = 'response')
+fmpreds_classes <- ifelse(fmpreds > 0.5, 1, 0) 
+table(fmpreds_classes,bank_test$class)
+```
+
+```{r}
+fm_cm <- caret::confusionMatrix(factor(fmpreds_classes), factor(bank_test$class))
+fm_confusion_matrix <- fm_cm$table
+fm_confusion_matrix
+```
+Większość obserwacji została poprawnie zidentyfikowana jako fałszywa lub prawdziwa, w pojedynczych przypadkach fałszywa obserwacja została zakwalifikowana jako prawdziwa i odwrotnie. 
+
+
+Dodając do siebie elementy na diagonali macierzy pomyłek ( czyli te poprawnie zidentyfikowane ) i dzieląc je przez sume wszystych elementów, otrzymujemy dokładność klasyfikatora:
+
+```{r}
+round(sum(diag(fm_confusion_matrix))/sum(fm_confusion_matrix), 2)
+```
+Dodatkowym narzędziem służącym do ocenu modelu jest krzywa ROC:
+
+```{r}
+fmroc <- pROC::roc(response = bank_test$class, predictor = fmpreds)
+
+pROC::plot.roc(fmroc, response = bank_test$class, predictor = fmpreds, legacy.axes = TRUE) + geom_abline(slope = 1, intercept = 0)
+
+
+```
+Kształt krzywej ROC mówi o dużej dokładności klasyfikatora, sprawdźmy jeszcze AUC:
+
+
+```{r}
+fmroc$auc
+```
+AUC czyli pole pod krzywą jest prawie równy 1, więc nasz klasyfikator działa bardzo dobrze. 
+
+
+
+
+
+
+
+
+
+

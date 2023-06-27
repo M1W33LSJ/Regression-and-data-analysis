@@ -1,0 +1,302 @@
+---
+title: "Regresja i analiza wariancji - Sprawozdanie 1"
+subtitle: 'Regresja liniowa - sprawozdanie' 
+author: 
+  name: 'Adrian Kowalski'
+  affiliation: 'Politechnika Krakowska'
+output: 
+  html_document:
+    theme: readable
+    toc: true
+    toc_float: true
+    df_print: paged
+---
+
+# Termin oddania sprawozdania : 14.04.2023 23:59:59
+
+
+# Zadanie 1
+
+Zaimportuj zbiór danych Carseats z biblioteki ISLR i dopasuj model (lub modele) regresji liniowej prostej przewidujący wartość zmiennej Sales. Zmienną objaśniającą dobierz według znanych metod (współczynnik korelacji, wykresy). Oceń jakość modelu ($R^2$, błąd standardowy) i zweryfikuj założenia (analiza reszt).
+
+```{r}
+library(tidyverse)
+library(ISLR)
+library(caret)
+library(ggcorrplot)
+library(broom)
+library(lmtest)
+carseats <- tibble::as.tibble(ISLR::Carseats)
+head(carseats)
+```
+Wskazówka: Po zaimportowaniu biblioteki ISLR informacje o danych Carseats można znaleźć wpisując w konsoli "?ISLR::Carseats".
+
+
+```{r}
+summary(carseats)
+```
+Zbiór danych 'carseats' zawiera informacje dotyczące sprzedaży fotelików samochodowych dla dzieci. Zawiera 400 obserwacji z 11 zmiennymi. 
+
+
+Sprawdzamy czy istnieją wartości istotnie odstające dla zmiennej Price:
+```{r}
+ggplot(carseats, aes(x = Price)) + geom_histogram(bins = 30)
+```
+Możemy zauważyć niewielką ilość obserwacji w ogonach, decydujemy się nie stosować clippingu, ze względu na to, że wartości odstające nie odstają nie na tyle, żeby mogły zaburzać działanie modelu. 
+
+Analogicznie postępujemy ze zmienną Sales:
+```{r}
+ggplot(carseats, aes(x = Sales)) + geom_boxplot()
+```
+Tutaj również nie widać istotnych wartości na ogonach. 
+
+
+
+Badamy zależność liniową:
+```{r}
+ggplot(carseats, aes(x=Price, y=Sales)) + geom_point() +
+ labs(title="Wykres punktowy zależności ceny od sprzedaży", x='Cena', y = "Sprzedaż") + geom_smooth(method='lm' ,formula=y~x, se=FALSE)
+```
+Możemy zaobserować brak skupisk obserwacji, można zauważyć pewną zależność liniową pomiędzy zmiennymi. 
+
+```{r}
+cor.test(carseats$Price, carseats$Sales)
+```
+Współczynnik korelacji wynosi ~ -0.44, zatem istenieje korelacja, wraz ze wzrostem ceny maleje sprzedaż. 
+
+
+Istotą zmienną wydaje się ShelveLoc, aby zbadać jej korelacje ze zmienną Sales zastosujemy one-hot coding. Sprawdzamy również korelacje innych zmiennych ilościowych korzystając z macierzy korelacji:
+
+```{r}
+carseats_ohc <- carseats %>% dplyr::mutate(ShelveLocBad = ifelse(ShelveLoc=='Bad',1,0)) %>% dplyr::mutate(ShelveLocMedium = ifelse(ShelveLoc=='Medium',1,0)) %>% dplyr::mutate(ShelveLocGood = ifelse(ShelveLoc=='Good',1,0))
+
+corelations = cor(carseats_ohc[,c(0:6,8,9,12,13,14)])
+
+ggcorrplot::ggcorrplot(corelations, type = 'lower')
+```
+
+Nasze przypuszczenia były słuszne, ShelveLoc wydaje się mieć istotny wpływ na sprzedaż. Dodatkowo możemy zauważyć że cena ma znaczną korelację ze sprzedażą, użyjemy jej do skontruowania modelu regresji liniowej:
+
+Tworzymy czysty model:
+
+```{r}
+first_model <- lm(Sales ~ Price, data = carseats)
+summary(first_model)
+```
+Współczynnik $R^2$ wynosi 0.198, błąd standardowy wynosi 2.532, co świadczy o tym, że jakość naszego modelu pozostawia wiele do życzenia. Wynika z tego, że zmienna 'Sales' zależy nie tylko od zmiennej 'Price'. 
+
+
+Badamy rozkład reszt:
+
+```{r}
+shapiro.test(first_model$residuals)
+```
+Z testu Shapiro-Wilka, możemy wyciągnąć wniosek, że reszty mają rozkład normalny.
+
+Sprawdźmy dodatkowo wykres kwartyl-kwartyl:
+
+```{r}
+ggplot(first_model, aes(sample=.resid)) + geom_qq() + geom_qq_line()
+```
+Wykres potwierdza nasze podejrzenia.
+
+Kolejnym punktem będzie sprawdzenie zerowej średniej reszt:
+
+```{r}
+t.test(first_model$residuals)
+```
+T.test wykazał że średnia reszt jest równa zero. 
+
+Sprawdzamy dodatkowo wykres 'residuals vs fitted':
+```{r}
+plot(first_model, which=1)
+```
+Możemy zaobserwować delikatne odchylenie przy większych wartościach zmiennej objaśnianej. 
+
+
+Niezależność reszt:
+
+```{r}
+#library(lmtest)
+dwtest(first_model)
+```
+W naszym przypadku p-value jest większa od $\alpha$=0.05 więc nie mamy dowodów, aby odrzucić hipotezę o niezależności w resztach.
+
+
+Homoskedastyczność:
+
+```{r}
+bptest(first_model)
+```
+P-value jest większe od 0.05, zatem przyjmujemy $H_0$ mówiącą o homoskedastyczności reszt.
+
+
+```{r}
+plot(first_model,which = 3)
+```
+Wykres potwierdza homoskedastyczność. 
+
+Spróbujmy poprawić nasz pierwszy model: 
+
+Wyrzucamy ze zbioru te wartości gdzie kolumna "Sales" przyjmuje wartość 0 aby być w stanie sprawdzić MAPE
+
+```{r}
+improved_carseats <- carseats %>% subset(Sales!=0) %>% filter(Sales!=0)
+```
+
+Tworzymy zbiór treningowy i testowy
+
+```{r}
+
+split <- createDataPartition(improved_carseats$Sales, p=0.75, list=FALSE)
+carseats_train = improved_carseats[split,]
+carseats_test = improved_carseats[-split,]
+```
+Tworzymy model na zbiorze treningowym
+
+```{r}
+train_model_1 <- lm(Sales ~ Price, data = carseats_train)
+summary(train_model_1)
+```
+
+Funkcja do sprawdzenia RMSE, MAE, MAPE:
+
+```{r}
+model_summary <- function(model, test_data, test_y){
+  model_glance <- broom::glance(model)
+  model_augment <- broom::augment(model)
+  train_mae <- mean(abs(model_augment$.resid))
+  train_mape <- mean(abs(model_augment$.resid/dplyr::pull(model_augment, var=1)))*100
+  predicted_y <- predict(model, test_data)
+  test_rmse <- sqrt(mean((test_y - predicted_y)^2))
+  test_mae <- mean(abs(test_y - predicted_y))
+  test_mape <- mean(abs((test_y - predicted_y)/test_y))*100
+  print("Wartośći charakterystyk liczbowych modelu.")
+  print("------------------------------------------")
+  cat("Treningowe R^2 wyniosło: ", model_glance$r.squared, "\n",
+  "Treningowe \"poprawione\" R^2 wyniosło: ", model_glance$adj.r.squared, "\n",
+  "Kryterium informacyjne Akaikego (AIC) wyniosło: ", model_glance$AIC, "\n",
+  "---------------------------------------------", "\n",
+  "Charakterystyki \"out-of-sample\"", "\n",
+  "Charakterystyka |   train  |   test   | \n", 
+  "RMSE wyniosło:  |", model_glance$sigma, "|", test_rmse , "|", "\n",
+  "MAE wyniosło:   |", train_mae, "|",  test_mae, "|" , "\n",
+  "MAPE wyniosło:  |", round(train_mape,2), "%|", round(test_mape,2), "%|",  "\n")
+}
+```
+
+Sprawdzamy jak "dobry" jest nasz model:
+
+```{r}
+model_summary(train_model_1, carseats_test,carseats_test$Sales)
+```
+
+Tak jak sie spodziewaliśmy, wartości wskazują na pewne braki w modelu. 
+
+
+
+
+
+# Zadanie 2
+
+Dopasuj model (lub modele) regresji liniowej wielorakiej przewidujący wartość zmiennej Sales. Model zbuduj w wybrany przez siebie sposób. Oceń jakość modelu i spełnienie założeń. Porównaj otrzymane modele z modelem regresji liniowej prostej. 
+
+Sprawdzamy poprawność danych histogramami:
+
+```{r}
+ggplot(carseats, aes(x=Price)) + geom_histogram()
+```
+
+```{r}
+ggplot(carseats, aes(x=Advertising)) + geom_histogram(bins = 10)
+```
+Pomimo skośności decydujemy się nie modyfikować zmiennej 'Advertising'.
+
+
+```{r}
+ggplot(carseats, aes(x=Age)) + geom_histogram(bins=10)
+```
+
+```{r}
+ggplot(carseats, aes(x=Income)) + geom_histogram()
+```
+
+Sprawdzamy założenia dla czystego modelu regresji wielorakiej:
+
+Pomijamy liniową zależność ponieważ sprawdziliśmy ją w zadaniu pierwszym.
+
+Dodajemy do modelu zmienne Advertising, Age, ShelveLoc:
+
+```{r}
+second_model <- lm(Sales ~ Price + Advertising + Age + Income + ShelveLoc, data = carseats)
+summary(second_model)
+```
+Możemy zauważyć znaczną poprawę modelu. $R^2$ wynosi 0.7074, a błąd reszt 1.539. Co wskazuje na lepsze dopasowaniu modelu do danych. 
+
+
+Sprawdzamy rozkład reszt:
+
+```{r}
+shapiro.test(second_model$residuals)
+```
+Z testu Shapiro-Wilka, możemy wyciągnąć wniosek, że reszty mają rozkład normalny.
+
+```{r}
+ggplot(second_model, aes(sample=.resid)) + geom_qq() + geom_qq_line()
+```
+Wykres kwartyl-kwartyl potwierdza nasze przypuszczenia.
+
+
+Zerowa średnia reszt
+
+```{r}
+t.test(second_model$residuals)
+```
+T.test wykazał że średnia reszt jest równa zero. 
+
+
+
+```{r}
+plot(second_model, which=1)
+```
+W przypadku modelu regresji wielorakiej widzimy znaczną poprawę na wykresie 'residuals vs fitted', brak znaczących odchyleń dla wartości zmiennej objaśnianej. 
+
+
+Niezależność reszt
+
+```{r}
+dwtest(second_model)
+```
+W tym przypadku p-wartość jest znacznie większa 0.05, zatem nie odrzucamy hipotezy o niezależności w resztach. 
+
+
+
+
+Homoskedastyczność
+
+```{r}
+bptest(second_model)
+```
+P-value jest większe od 0.05 zatem przyjmujemy hipotezą o homoskedastyczności. 
+
+
+```{r}
+plot(second_model,which = 3)
+```
+Co również potwierdza wykres. 
+
+
+Tworzymy model regresji wielorakiej na zbiorze treningowym:
+
+```{r}
+train_model_2 <- lm(Sales ~ Price + Advertising + Age + Income + ShelveLoc, data = carseats_train)
+summary(train_model_2)
+```
+Sprawdzamy jak "dobry" jest nasz model:
+
+```{r}
+model_summary(train_model_2, carseats_test, carseats_test$Sales)
+```
+Podsumowaując, model regresji wielorakiej znacznie dokładniej przewiduje wartość zmiennej 'Sales'.  
+
+

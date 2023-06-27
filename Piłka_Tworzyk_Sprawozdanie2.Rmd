@@ -1,0 +1,273 @@
+---
+title: "Analiza Danych - Sprawozdanie 2"
+author:
+  name: Adrian Kowalski
+  affiliation: Politechnika Krakowska
+subtitle: Centralne twierdzenie graniczne i test t.
+output:
+  html_document:
+    df_print: paged
+---
+
+# Rozkład Pareto
+
+Rozkład Pareto wywodzi się z matematycznych rozważań nad słynną ekonomiczną zasadą 80-20. Z czysto matematycznego punktu widzenia jest on ciekawy ze względu na to, kiedy istnieją jego momenty. Teoretyczne wartości momentów i więcej informacji na temat tego rozkładu można znaleźć pod [linkiem](https://en.wikipedia.org/wiki/Pareto_distribution). Implementacje funkcji generujących próby, gęstości itd. znajdziemy pod [tym](https://www.rdocumentation.org/packages/EnvStats/versions/2.7.0/topics/Pareto) linkiem, niezbędny jest do tego pakiet EnvStats.
+```{r}
+#install.packages('EnvStats')
+#install.packages("tidyverse")
+
+library(EnvStats)
+library(tidyverse)
+#install.packages('moments')
+library(moments)
+library(ggpubr)
+library(gridExtra)
+#install.packages('ggpubr')
+```
+
+
+# Zadanie 1
+
+Niech $X_i$ będzie ciągiem niezależnych zmiennych losowych o jednakowym rozkładzie Pareto z ustalonym parametrem $\alpha$ i $x=1$. Wiemy, że dla parametru $\alpha<2$ nie istnieje wariancja rozkładu Pareto. Dobierz parametr $\alpha$ i sprawdź dla jakiej wartości liczby $k$ możemy przybliżyć średnią arytmetyczną zmiennych z rozkładu Pareto za pomocą rozkładu normalnego (oczywiśćie na mocy Centralnego Twierdzenia Granicznego). Policz kurtozę i skośność prób z rozkładu Pareto i omów jak wpływają one na tempo zbieżności w CTG i wygląd histogramu próby z rozkładu Pareto.
+
+Ustalamy $\alpha = 6$ oraz ilość rozkładów które bedziemy sumowac $k = 800$ ze względu na to że aby przybliżyć średnią arytmetyczną zmiennych z rozkładu Pareto za pomocą rozkładu normalnego potrzebujemy jak najwięcej prób.
+```{r}
+x_m = 1
+alpha = 6
+k <- 800
+x <- rpareto(1000,x_m,alpha)
+for (i in 1:(k-1)) {
+  x = x + rpareto(1000,x_m,alpha)  
+}
+x_mean <- x/800
+
+ex_pareto <- alpha*x_m/(alpha-1)
+var_pareto <- (x_m/(alpha-1))^2*alpha/(alpha-2)
+
+
+table_standarized_pareto <- tibble(value=x_mean) %>% mutate(value = sqrt(k)*(value-ex_pareto)/var_pareto)
+```
+
+```{r}
+ggplot(table_standarized_pareto,aes(x=value)) + geom_histogram(bins = 20)
+```
+
+
+```{r}
+norm <- rnorm(1000,0,1)
+table_norm <- tibble(value = norm)
+ggplot(table_norm, aes(x= value)) + geom_histogram(bins = 20)
+```
+
+
+```{r}
+qqparet <- ggqqplot(table_standarized_pareto$value)
+qqnorm <- ggqqplot(norm)
+grid.arrange(qqparet, qqnorm, ncol = 2)
+```
+
+Wykresy kwantyl-kwantyl pokrywają się co świadczy o tym, że poprawnie przybliżyliśmy rozkład Pareto.
+
+
+Tak jak możemy zauważyć histogramy mają już całkiem podobny kształt, który nas satysfakcjonuje ponieważ ilość prób okazała się wystarczająca do przybliżenia.
+
+Jak kurtoza i skośność wpływają na tempo zbieżności CTG?
+
+Rozważmy kilka rozkladów Pareto:
+```{r}
+
+
+alpha_params <- c(5, 6, 7, 8, 9)
+
+pareto_table <- tibble(pareto1 = rpareto(1000, 1 , alpha_params[1]),pareto2 = rpareto(1000, 1 , alpha_params[2]), pareto3 = rpareto(1000, 1 , alpha_params[3]), pareto4 = rpareto(1000, 1 , alpha_params[4]), pareto5 = rpareto(1000, 1 , alpha_params[5])) 
+
+
+pareto_histograms <- pareto_table %>% pivot_longer(c(1:5), names_to = 'sample')
+```
+
+
+```{r}
+pareto_parameters <- pareto_histograms %>% group_by(`sample`) %>% summarize(kurtosis = kurtosis(value), skewness = skewness(value)) %>% print()
+```
+
+```{r}
+ggplot(pareto_histograms, aes(x = value)) + geom_histogram(bins = 30) + facet_wrap(~sample) + ggtitle("Histogramy rozkładów Pareto") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+Dodatnie kurtozy informują o występowaniu wartości w ogonach. Dodatnia skośność wskazuje na prawoskośność rozkładu, prawe ramię jest wydłużone. 
+
+
+Normalizacja prób
+
+```{r}
+
+normalization <- function(l, id){
+  x_m <- 1
+  alpha <- alpha_params[id]
+  x <- 0
+  for (k in 1:l) {
+    x = x + rpareto(1000, x_m,alpha)
+  }
+  x_mean <- x/l
+  ex_pareto <- alpha*x_m/(alpha-1)
+  var_pareto <- (x_m/(alpha-1))^2*alpha/(alpha-2)
+  table_x <- tibble(value=x)
+  table_standarized_pareto <- tibble(value=x_mean) %>% mutate(value = sqrt(l)*(value-ex_pareto)/var_pareto)
+  
+}
+
+pareto_parameters
+
+```
+
+Porównanie znormalizowanych rozkładów:
+
+```{r}
+
+comparison2 <- function(n){
+normalization_compared <- tibble(sample = c('pareto1','pareto2', 'pareto3', 'pareto4', 'pareto5', 'N(0,1)'), kurtosis_before = c(pareto_parameters$kurtosis, 'x'), skewness_before =c(pareto_parameters$skewness,'x'),sum_of = c(n,n,n,n,n,'x'),
+                                 sum_kurtosis = c(kurtosis(normalization(n, 1)), kurtosis(normalization(n, 2)), kurtosis(normalization(n, 3)),kurtosis(normalization(n, 4)), kurtosis(normalization(n, 5)), kurtosis(rnorm(1000))), sum_skewness = c(skewness(normalization(n, 1)), skewness(normalization(n, 2)), skewness(normalization(n, 3)),skewness(normalization(n, 4)), skewness(normalization(n, 5)), skewness(rnorm(1000))))
+
+normalization_compared}
+```
+
+Tabela zawiera kurtozę oraz skośność prób przed sumowaniem, liczbę zsumowanych prób oraz kurtozę oraz skośność zsuomowanych prób
+
+```{r}
+comparison2(300)
+```
+
+Wraz ze wzrostem liczby sumowanych rozkładów kurtoza oraz skośność zaczynają się pokrywać z kurtozą i skośnością standardowego rozkładu normalego.
+
+
+# Zadanie 2
+
+Firma A produkuje telefony komórkowe. Na pudełku nowego modelu S firmy A widnieje napis, że bateria wytrzymuje średnio 48 godzin. Nie uwierzyliśmy firmie A i zostawiliśmy na 42 różnych telefonach modelu S włączone wideo tak długo, aż się rozładowały. W pliku *zad2.csv* znajdują się dane zebrane przez nas podczas tego eksperymentu. Uzasadnij, że możesz użyć testu t i użyj testu t, aby zweryfikować, czy firma A nie okłamuje konsumentów.
+```{r}
+battery_life <- read.csv('zad2.csv')
+head(battery_life)
+```
+
+Możemy użyć t-testu ponieważ mamy podaną wartość oczekiwaną populacji $mu0 = 48$ (inaczej mówiąc mamy podana wartość referencyjną), innym przypadkiem kiedy możemy użyć t-testu jest sytuacja gdy analizujemy dwie populacje. W pierwszym przypadku nasza hipoteza zerowa $ H_{0}: \mu=48$ a w drugim $H_{0}: \mu_{1}=\mu_{2}$. 
+
+Na początek postanowiliśmy narysować wykres który powinien nam dać trochę informacji co do tego czy odrzucimy hipotezę zerową.
+
+```{r}
+#korzystamy z t-studenta bo mamy wartosci referencyjna
+n <- length(battery_life$durability)
+nden <- tibble(values = seq(-3,3,0.1)) %>% mutate(density = dt(values, n-1))
+Z_sd <- sqrt(1/(n-1)*sum((battery_life$durability - mean(battery_life$durability))^2))
+
+mu0 <- 48
+Z_stat <- (mean(battery_life$durability) - mu0) / (Z_sd / sqrt(n))
+Z_stat
+ggplot(data = nden, aes(x=values, y=density)) + geom_area(alpha = 0.3, color='blue') + geom_vline(xintercept=qt(0.025, 41), linetype='dashed', color='red') + geom_vline(xintercept=qt(0.975, 41), linetype='dashed', color='red') + geom_vline(xintercept=Z_stat, color='green') + ggtitle("Obszary decyzyjne dla testu t studenta")
+max(battery_life$durability)
+```
+
+Możemy zauważyć, że zielona linia która symbolizuje naszą statystykę testową znajduje się poza przedziałem wyznaczonym przez kwantyle (zaznaczone na wykresie czerwonymi przerywanymi liniami). Daje nam to informację, że najprawdopodobniej hipoteza zerowa jest odrzucona, aby się upewnić przeprowadzamy t-test.
+
+```{r}
+Z_stat
+t.test(battery_life$durability,mu=48)
+```
+Nasza teoria okazuje się słuszna, a wiemy to po tym że p-value jest wyjątkowo małe i na pewno mniejsze niż 0.05 co w naszym przypadu jest rozmiarem testu. Co więcej analizując przedziały ufności możemy dojść do wniosku że bateria raczej wytrzymuje dłużej niż krócej, a średni czas wytrzymałosći baterii to 52h.
+
+Teraz wykonamy test nieparametryczny bootstrap.
+
+```{r}
+bootstrap_stat_battery <- rep(0,10000)
+for(i in 1:10000){
+  curr_sample <- sample(battery_life$durability - mean(battery_life$durability) + 48, size=n, replace=TRUE)
+  bootstrap_stat_battery[i] <- (mean(curr_sample)-mu0)/((Z_sd)/sqrt(n))
+  
+}
+
+bootstrap_stat_battery <- tibble(stat = bootstrap_stat_battery)
+```
+
+
+```{r}
+
+ggplot(data = bootstrap_stat_battery, aes(x = stat)) + geom_histogram(binwidth=0.5) + geom_vline(xintercept=c(quantile(bootstrap_stat_battery$stat, 0.025),quantile(bootstrap_stat_battery$stat, 0.975)), linetype='dashed', color='red')
+```
+
+
+```{r}
+bootstrap_battery_p <- sum((bootstrap_stat_battery$stat <= -abs(Z_stat))|(bootstrap_stat_battery$stat >= abs(Z_stat)))/length(bootstrap_stat_battery$stat)
+
+paste("p-value testu bootstrap wynosi", bootstrap_battery_p)
+```
+Po wykonaniu metody bootstrap otrzymujemy $p-value = 0$ co świadczy o tym że żadna wartość z naszej metody nie wpadła w nasze ustalone przedziały co świadczy o tym, że hipoteza zerowa jest odrzucona.
+
+# Zadanie 3
+
+Firma B produkuje czekoladę. Po latach zarząd postanowił, że zmienią opakowanie ich czekolady, co na pewno zwiększy sprzedaż. W pliku *zad3t.csv* znajdują się dane ze sprzedaży czekolady z nowym opakowaniem w jednym ze sklepów w jednym z dużych polskich miast oraz dane ze sprzedaży czekolady ze starym opakowaniem w jednym ze sklepów w jednym z dużych polskich miast. Używając testu t studenta sprawdź czy zarząd miał racje i nowe opakowanie zwiększyło sprzedaż.
+
+Na początek musimy trochę "posprzątać" tabelę na której będziemy pracować oraz dodatkowo tworzymy kilka przydatnych zmiennych, które są niezbędne w następnych krokach.
+```{r}
+dane <- read_csv("zad3t.csv")
+head(dane)
+
+#Porządkujemy dane w następujący sposób 
+
+dane_tibble <- tibble(dane) %>% group_by(pack) %>% mutate(row = row_number()) %>% pivot_wider(names_from = pack, values_from = sold) %>% select(- row)
+
+
+samples_difference <- mean(dane_tibble$new_pack) - mean(dane_tibble$old_pack)
+
+Variance1 <- (1/(30))*sum((dane_tibble$new_pack-mean(dane_tibble$new_pack))^2)
+Variance2 <- (1/(30))*sum((dane_tibble$old_pack-mean(dane_tibble$old_pack))^2)
+
+sp = sqrt((Variance1 + Variance2)/2)
+
+n = length(dane_tibble$new_pack) # = length(dane_tibble$old_pack)
+
+t = (samples_difference)/(sp*sqrt(2/n)) #statystyka testowa u1 = u2
+
+
+```
+Ponownie rysujemy wykres aby mniej więcej zoorientować się czy hipoteza zerowa którą w tym przypadu wygląda następująco: $H_{0}: \mu_{1}=\mu_{2}$.
+$\mu_{1}$ i $\mu_{2}$ to odpowiednio średnie new_pack i old_pack.
+
+```{r}
+zad3 = tibble(values = seq(-3,3,0.1)) %>% mutate(density = dt(values, 2*n-2))
+
+
+ggplot(data = zad3, aes(x=values, y=density)) + geom_area(alpha = 0.3, color='blue') + geom_vline(xintercept=qt(0.025, 60), linetype='dashed', color='red') + geom_vline(xintercept=qt(0.975, 60), linetype='dashed', color='red') + geom_vline(xintercept=t, color='green') + ggtitle("Obszary decyzyjne dla testu t studenta")
+```
+
+Ponownie jak w zadaniu drugim w oparciu o wykres możemy odrzucić hipotezę zerową, jednak nie spoczywamy na laurach i przystępujemy do wykonania t-testu aby uzyskać więcej informacji.
+```{r}
+t
+t.test(dane_tibble$new_pack, dane_tibble$old_pack, var.equal = TRUE)
+```
+Po wykonaniu t-testu potwierdzamy nasze podejrzenia otrzymane po wykonaniu powyższego wykresu (hipoteza zerowa jest odrzucona, wiemy to po tym że $p-value<0.05$ czyli mniejsze od rozmiaru naszego testu), dodatkowo dowiadujemy się, po spojrzeniu na przedziały ufności, że wprowadzenie nowych opakowań poskuktowało zwiększeniem sprzedaży, aby potwierdzić nasze spekulacje możemy jeszcze dodatkowo spojrzeć na średnie gdzie mean x to średnia sprzedaż z nowym opakowaniem, a mean y to średnia sprzedaż ze starym opakowaniem.
+
+
+Dodatkowo wykonujemy metodę bootstrap.
+
+```{r}
+bootstrap_stat_pack <- rep(0,50000)
+for(i in 1:50000){
+  curr_sample_1 <- sample(dane_tibble$new_pack - mean(dane_tibble$new_pack), size=n, replace=TRUE)
+  curr_sample_2 <- sample(dane_tibble$old_pack - mean(dane_tibble$old_pack), size=n, replace=TRUE)
+  bootstrap_stat_pack[i] <- (mean(curr_sample_1)-mean(curr_sample_2))/(sp*sqrt(2/n))
+}
+bootstrap_stat_pack <- tibble(mean_diff = bootstrap_stat_pack)
+
+ggplot(data = bootstrap_stat_pack, aes(x=mean_diff)) + geom_histogram(binwidth = 0.5) + geom_vline(xintercept=c(quantile(bootstrap_stat_pack$mean_diff, 0.025),quantile(bootstrap_stat_pack$mean_diff, 0.975)), linetype='dashed', color='red')
+```
+
+
+```{r}
+bootstrap_pack_p <- sum((bootstrap_stat_pack <= -abs(t))|(bootstrap_stat_pack >= abs(t)))/length(bootstrap_stat_pack$mean_diff)
+
+paste("p-value testu bootstrap wynosi", bootstrap_pack_p)
+```
+
+P-value otrzymane z metody bootstrap jest mniejsze od rozmiaru naszego testu stąd wnioskujemy, że hipoteza zerowa jest odrzucona.
+
+# Zadanie dodatkowe
+
+Użyj metody bootstrap do wykonania powyższych testów i porównaj wyniki.

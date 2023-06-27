@@ -1,0 +1,220 @@
+---
+title: "Powerlifting dataset - Projekt"
+subtitle:  
+author: 
+  name: 'Mikolaj Pilka, Damian Tworzyk'
+  affiliation: 'Politechnika Krakowska'
+output: 
+  html_document:
+    theme: readable
+    toc: true
+    toc_float: true
+    df_print: paged
+---
+
+```{r, message=FALSE, echo=FALSE}
+library('tidyverse')
+library('ggcorrplot')
+library('lmtest')
+```
+
+```{r, message=FALSE, echo=FALSE}
+data_main = read_csv('openpowerlifting.csv')
+
+data_selected = select(data_main, -Wilks, -McCulloch, -Glossbrenner, -Division, -Squat1Kg, -Squat2Kg, -Squat3Kg, -Squat4Kg, -Bench1Kg,-Bench2Kg,-Bench3Kg, -Bench4Kg, -Deadlift1Kg, -Deadlift2Kg, -Deadlift3Kg, -Deadlift4Kg, -Country, -Date, -MeetCountry, -MeetState, -MeetName, -Federation)
+
+```
+
+```{r}
+data_lm = na.omit(data_selected)
+
+data_lm$Best3BenchKg[data_lm$Best3BenchKg < 0] = 0
+data_lm$Best3SquatKg[data_lm$Best3SquatKg < 0] = 0
+
+summary(data_lm)
+```
+
+MODEL REGRESJI
+
+
+
+```{r}
+model = lm(TotalKg ~ Sex + Equipment + BodyweightKg + AgeClass, data = data_lm)
+
+summary(model)
+```
+
+Model przewiduje wynik w trójboju (TotalKg) na podstawie zmiennych "Sex", "Equipment", "BodyweightKg" oraz "AgeClass".
+
+
+
+Założenia modelu regresji:
+
+ROZKLAD RESZT
+
+```{r}
+ggplot(model, aes(x=.resid)) + geom_histogram(bins=30) + labs(title='Histogram reszt z modelu', x='Reszty', y='Częstotliwość')
+```
+
+Rozkład reszt jest normalny.
+
+ZEROWA ŚREDNIA RESZT
+
+```{r}
+t.test(model$residuals)
+```
+
+Można założyć zerową średnią reszt ponieważ nasze p-value jest większe niż zakładany poziom istotności (0.05). Warto również zauważyć ze estymowana średnia jest prawie równa 0 co również nas cieszy.
+
+NIEZALEŻNOŚĆ RESZT
+
+```{r}
+lmtest::dwtest(model)
+```
+W naszym przypadku p-value jest mniejsza od $\alpha$=0.05 więc nie mamy dowodów, aby przyjąć hipotezę o niezależności w resztach.
+
+HOMOSKEDASTYCZNOŚĆ
+
+```{r}
+lmtest::bptest(model)
+```
+P-value jest mniejsze od 0.05, zatem odrzucamy $H_0$ mówiącą o homoskedastyczności reszt.
+
+
+ANALIZA WARIANCJI
+
+PRZYGOTOWANIE DANYCH DO PRZEPROWADZENIA JEDNOCZYNNIKOWEJ I DWUCZYNNIKOWEJ ANALIZY WARIANCJI.
+
+W celu większej przejszystości zdecydowaliśmy się utworzyć mniejszą ilość klas wagowych (klasy wagowe zostały zaczerpnięte z regulaminu technicznego trójboju klasycznego dla Akademickich Mistrzostw Polski, zdecydowaliśmy się podzielić je według męskiej kategorii wagowej ponieważ nie ma dużej różnicy pomiedzy męską a damksą)
+
+```{r, message=FALSE, echo=FALSE}
+data_aov = data_lm
+
+data_aov$WeightClassKg = as.numeric(gsub('\\+','',data_aov$WeightClassKg))
+data_aov$WeightClassKg[data_aov$WeightClassKg < 59 & data_aov$WeightClassKg >0]=-59
+data_aov$WeightClassKg[data_aov$WeightClassKg < 66 & data_aov$WeightClassKg >0]=-66
+data_aov$WeightClassKg[data_aov$WeightClassKg < 74 & data_aov$WeightClassKg >0]=-74
+data_aov$WeightClassKg[data_aov$WeightClassKg < 83 & data_aov$WeightClassKg >0]=-83
+data_aov$WeightClassKg[data_aov$WeightClassKg < 93 & data_aov$WeightClassKg >0]=-93
+data_aov$WeightClassKg[data_aov$WeightClassKg < 105 & data_aov$WeightClassKg >0]=-105
+data_aov$WeightClassKg[data_aov$WeightClassKg < 120 & data_aov$WeightClassKg >0]=-120
+data_aov$WeightClassKg[data_aov$WeightClassKg >= 120]= 120
+data_aov$WeightClassKg[data_aov$WeightClassKg == '120']='+120'
+data_aov %>% dplyr::mutate(WeightClassKg = as.character(WeightClassKg))
+
+unique(data_aov$WeightClassKg)
+```
+
+PRZEPROWADZAMY KILKA JEDNOCZYNNIKOWYCH ANALIZ WARIANCJI:
+
+```{r}
+ggplot(data_aov, aes(x=Equipment, y=TotalKg, color=Equipment)) + geom_jitter()
+```
+
+```{r}
+ggplot(data_aov,aes(x=Equipment, y=TotalKg)) + geom_boxplot()
+```
+
+Na powyższych wykresach możemy zaobserwować, że badane dane mają potencjalnie równą wariancje oraz ich rozkłady są normalne.
+
+```{r}
+summary(aov(TotalKg ~ Equipment, data=data_aov))
+```
+
+Po wykonaniu analizy odrzucamy hipoteze zerową mówiącą o równych średnich i dochodzimy do wniosku, że wyposażenie stosowane podczas trójboju ma wpływ na sumę podniesionego ciężaru.
+
+```{r, message=FALSE, echo=FALSE}
+TukeyHSD(aov(TotalKg ~ Equipment, data=data_aov))
+```
+
+```{r}
+plot(TukeyHSD(aov(TotalKg ~ Equipment, data=data_aov)))
+```
+
+Po wykonaniu analizy post-hoc dochodzimy do wniosku, że osoby używające wyposażenie "Multi-ply" statystycznie osiągnęły najlepsze wynik pod względem podniesionych kilogramów. Niżej uplasowały się kolejno Single-ply, Wraps i Raw.
+
+
+Czy płeć ma znaczenie w wynikach trójboju:
+
+```{r}
+summary(aov(TotalKg ~ Sex, data=data_aov))
+```
+
+Po wykonaniu analizy odrzucamy hipoteze zerową mówiącą o równych średnich i dochodzimy do wniosku, że płeć ma wpływ na sumę podniesionego ciężaru.
+
+```{r}
+ggplot(data_aov, aes(x=Sex, y=TotalKg, color=Sex)) + geom_jitter()
+```
+
+```{r}
+ggplot(data_aov,aes(x=Sex, y=TotalKg)) + geom_boxplot()
+```
+
+Na powyższych wykresach możemy zaobserwować, że badane dane mają potencjalnie równą wariancje oraz ich rozkłady są normalne.
+
+```{r}
+t.test(TotalKg ~ Sex, data_aov)
+```
+Nie musimy wykonywać Tukey'a, żeby otrzymać wnioski możemy wykonać t.test i wywnioskować, że średnie pomiedzy płciami są różne i mężczyźni statystycznie podnoszą większy ciężar.
+
+
+Czy kategoria wagowa ma wpływ na wynik trójboju?
+
+```{r}
+summary(aov(TotalKg ~ WeightClassKg, data=data_aov))
+```
+
+Po wykonaniu analizy odrzucamy hipoteze zerową mówiącą o równych średnich i dochodzimy do wniosku, że kategoria wagowa ma wpływ na to jaki ciężar podniósł zawodnik.
+
+```{r}
+ggplot(data_aov, aes(x=WeightClassKg, y=TotalKg, color=WeightClassKg)) + geom_jitter()
+```
+
+
+```{r}
+ggplot(data_aov,aes(x=WeightClassKg, y=TotalKg)) + geom_boxplot()
+```
+
+Na powyższych wykresach możemy zaobserwować, że badane dane mają potencjalnie równą wariancje oraz ich rozkłady są normalne.
+
+```{r, message=FALSE, echo=FALSE}
+TukeyHSD(aov(TotalKg ~ WeightClassKg, data=data_aov))
+```
+
+```{r}
+plot(TukeyHSD(aov(TotalKg ~ WeightClassKg, data=data_aov)))
+```
+
+Po przeprowadzeniu analizy post-hoc dochodzimy do wniosku że wraz ze wzrostem kategorii wagowej wzrasta ilość podniesionego ciężaru przez zawodnika.
+
+PRZEPROWADZAMY DWUCZYNNIKOWĄ ANALIZE WARIANCJI:
+
+Sprawdzamy czy płeć na wpływ na efektywność wykorzystywanego sprzętu.
+
+```{r}
+ggplot(data_aov, aes(x=Equipment, y=TotalKg)) + geom_boxplot() + facet_wrap(~Sex)
+```
+
+```{r}
+summary(aov(TotalKg~Sex*Equipment,data_aov))
+```
+```{r}
+ggplot(data_aov, aes(x=Equipment, y=TotalKg, color=Sex, group=Sex)) + stat_summary(fun=mean, geom = 'point') + stat_summary(fun=mean, geom='line')
+```
+
+Po przeprowadzeniu dwuczynnikowej analizy wariancji dochodzimy do wniosku, że korzyści wynikające z dodatkowego sprzętu nie są zależne od płci. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

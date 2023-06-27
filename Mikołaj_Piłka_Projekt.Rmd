@@ -1,0 +1,225 @@
+---
+title: "Projekt"
+author: "Mikolaj Pilka"
+date : "25.01.2023"
+affiliation: Politechnika Krakowska
+subtitle: Titanic Dataset
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+# Zadanie
+
+Projekt 1.
+
+- wczytać i opisać dane (6 pkt)
+
+- przynajmniej dwie metody wizualizacji (4 pkt)
+
+- test parametryczny z interpretacją (5 pkt)
+
+- test nieparametryczny z interpretacją (5 pkt)
+
+-Punkt pierwszy
+
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+#remove.packages('htmltools')
+#install.packages('htmltools')
+#tinytex::install_tinytex()
+library(DT)
+library(tidyverse)
+library(gridExtra)
+```
+
+
+```{r}
+# Wczytanie danych
+data <- read_csv("titanic.csv")
+```
+
+```{r}
+data
+```
+
+Opisujemy dane, na początku skorzystamy z funkcji summary() aby łatwiej nam było wyciągnąć jakieś infromacje z tabeli.
+
+```{r}
+summary(data)
+```
+
+W tabeli znajduje się 12 kolumn i 891 wierszy. 
+
+Kolumny:
+
+PassangerId - nic ciekawego, możemy się dowiedzieć ile było pasażerów patrząc na max=891,
+
+Survived - ciekawsza kolumna dowiadujemy się z niej o średniej ilości osób które przeżyły tj. około 38%,
+
+Pclass - patrząc na mediane możemy śmiało stwierdzić że najwięcej było pasażerów w 3 klasie,
+
+Name, Sex - odpowiednio dają informacje o imieniu, nazwisku oraz płci pasażera,
+
+Age - kolumna z której dostajemy ogrom informacji takie jak, najmłodszy pasażer był kilku miesięcznym dzieckiem, najstarszy miał 80 lat, średni wiek na pokładzie to około 30 lat, a najwięcej pasażerów było w wieku 28 lat, mamy także 177 pasażerów u których wiek nie był określony,
+
+SibSp - ilość rodzeństwa i małżonków/małżonek,
+
+Parch - ilość dzieci i rodziców,
+
+Ticket - bilet,
+
+Fare - opłata, najczęstsza opłata to 14.45, najmniejmniejsza opłata to 0 (najpawdopodobniej pracownicy), największa to 512.33, a średnia opłata to 32.20,
+
+Cabin - kabina w które pasażer był zakwaterowany,
+
+Embarked - miejsce w którym pasażer wsiadł.
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------
+
+-Punkt drugi
+
+Wykres kołowy, przedstawiający stosunek pomiedzy ilością biletów na podstawie klasy:
+
+```{r}
+# Tworzenie nowych zmiennych
+data$first_class <- ifelse(data$Pclass == 1, 1, 0)
+data$second_class <- ifelse(data$Pclass == 2, 1, 0)
+data$third_class <- ifelse(data$Pclass == 3, 1, 0)
+
+# Sumowanie liczby pasażerów w każdej klasie
+first_class_count <- sum(data$first_class)
+second_class_count <- sum(data$second_class)
+third_class_count <- sum(data$third_class)
+
+# Tworzenie danych do wykresu
+class_data <- c(first_class_count, second_class_count, third_class_count)
+class_names <- c("First Class", "Second Class", "Third Class")
+
+# Rysowanie wykresu kołowego
+pie(class_data, labels = c("","",""),col = heat.colors(3), main = "Distribution of passangers by class")
+legend("bottomleft", c("First class","Second class","Third class"), fill = heat.colors(3))
+```
+
+Najwięcej było biletów klasy trzeciej, natomiast ilość biletów pierwszej i drugiej klasy była stosunkowo podobna.
+
+--------------------------------------------------------------------------------------------------------------------------------------------
+
+Wykres słupkowy, który pokazuje zależność między osobami które przeżyły, a ich wiekiem.
+
+```{r}
+# Usuwam wiersze posiadające wartość NA w kolumnie "age"
+data <- data[!is.na(data$Age),]
+
+# Przedziały wiekowe
+data$age_range <- cut(data$Age, breaks = seq(0, 90, by = 10))
+
+# Grupowanie danych według przedziałów wiekowych i liczenie liczby osób, które przeżyły.
+survived_by_age_range <- data %>% group_by(age_range) %>% summarise(survived = sum(Survived))
+
+# Tworzenie wykresu słupkowego
+ggplot(data = survived_by_age_range, aes(x = age_range, y = survived, fill = age_range)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Number of people who escaped with their lives according to age range") +
+    xlab("Age range") +
+  ylab("Number of people") +
+  scale_fill_brewer(palette = "Reds") + 
+  theme_minimal()
+```
+
+--------------------------------------------------------------------------------------------------------------------------------------------
+
+Wykres pudełkowy, który pokazuje rozkład pasażerów na podstawie klasy, w celu większej przejrzystości narysowałem 3 wykresy:
+
+```{r}
+# Tworzę tabele pomocnicze
+first_class <- data %>% filter(Pclass == 1)
+second_class <- data %>% filter(Pclass == 2)
+third_class <- data %>% filter(Pclass == 3)
+# Tworzę wykresy pudełkowe:
+first <- ggplot(first_class, aes(x = 'Klasa 1', y = Age)) +
+geom_boxplot() +
+ggtitle("Age distribution of first class passengers") +
+ylab("Age")
+
+second <- ggplot(second_class, aes(x = 'Klasa 2', y = Age)) +
+geom_boxplot() +
+ggtitle("Age distribution of second class passengers") +
+ylab("Age")
+
+third <- ggplot(third_class, aes(x = 'Klasa 3', y = Age)) +
+geom_boxplot() +
+ggtitle("Age distribution of third class passengers") +
+ylab("Age")
+# Wyświetlam 3 wykresy na jednym gridzie w celu większej przejrzystości
+grid.arrange(first, second, third, ncol=3)
+```
+
+Klasa 1 - najwięcej biletów zakupiły osoby w wieku około 40 lat, najstarszy pasażer pierwszej klasy miał około 80 lat, a najmłodszy był najprawdopodobniej kilkumiesięcznym dzieckiem.
+
+Klasa 2 - najwięcej biletów zakupiły osoby w wieku około 30 lat, najstarszy (pomijając obserwacje odstające) był w wieku około 55 lat, a najmłodszy (pomijając obserwacje odstające) miał okoł 5 lat.
+
+Klasa 3 - kupowana zdecydowanie częsciej przez osoby młodsze w porówaniu do dwóch poprzednich, najwięcej biletów zakupiły osoby w wieku około 25 lat, najstarszy (pomijając obserwacje odstające) był w wieku około 50 lat, a najmłodszy był najprawdopodobniej kilkumiesiecznym dzieckiem.
+
+--------------------------------------------------------------------------------------------------------------------------------------------
+
+Histogram obrazujący rozkład wieku pasażerów:
+
+```{r}
+ggplot(data, aes(x = Age)) +
+  geom_histogram(binwidth = 5, color = "black", fill = "white") +
+  ggtitle("Age distribution of passengers") +
+  xlab("Age") +
+  ylab("Number of passengers")
+```
+
+--------------------------------------------------------------------------------------------------------------------------------------------
+
+-Punkt trzeci
+
+Wykonujemy test t-studenta dla dwóch populacji.Populacja pierwsza to wiek osób które przeżyły, populacja druga to wiek osób które nie przeżyły. Hipoteza zerowa wygląda następująco $H_0:$ nie ma znaczącej róznicy wieku pomiedzy osobami, które przeżyły, a tymi które nie przeżyły. Hipoteza alternatywna: osoby, które przeżyły, były młodsze od tych, które nie przeżyły.
+
+```{r}
+
+survived_data <- data[data$Survived == 1,]
+not_survived_data <- data[data$Survived == 0,]
+
+
+t.test(survived_data$Age, not_survived_data$Age)
+```
+
+Dane, które otrzymaliśmy pozwalają nam wyciągnąć następujące wnioski: 
+
+-statystyka testowa jest równa -2.046,
+
+-stopnie swobody są równe 598.84
+
+-p-value jest równe 0.04119 to jest mniejsze od naszego poziomu istotności ($\alpha=0.05$), z tego wynika że możemy odrzucić hipoteze zerową, tzn. że wiek ma wpływ na przeżywalność,
+
+-przedziały ufności informują nas o tym, że rzeczywiście osoby, które przeżyły, były młodsze od tych, które nie przeżyły,
+
+-średnia wieku osób, które przeżyły, to 28 lat, a osób, które nie przeżyły, to 31 lat.
+
+--------------------------------------------------------------------------------------------------------------------------------------------
+
+-Punkt czwarty
+
+Używamy testu Fishera aby sprawdzić czy płeć pasażera miała wpływ na przeżywalność. W takim razie $H_0:$ nie ma zależności pomiedzy płcią, a przeżywalnością. Hipoteza alternatywna: płeć ma wpływ na przeżywalność. Wcześniej musimy jednak utworzyć odpowiednio skonstuowaną tabelę.
+
+```{r}
+assisting_tibble <- tibble(Survived = data$Survived, Sex = data$Sex) %>% group_by(Survived, Sex) %>% 
+  summarise(count = n()) %>% spread(Sex, count)
+assisting_tibble
+```
+
+
+```{r}
+fisher.test(assisting_tibble[,2:3])
+```
+
+-p-value daje nam informację o tym, że hipoteza zerowa jest odrzucona,
+
+-przedział ufności mówi o tym, że zależność nie jest przypadkowa,
+
+-odds ratio w tym przypadku mówi o tym, że szansa na przeżycie mężczyzny to 0.0843102 szansy na przeżycie kobiety

@@ -1,0 +1,179 @@
+---
+title: "Regresja i analiza wariancji - Sprawozdanie 2"
+author:
+  name: Adrian Kowalski
+  affiliation: Politechnika Krakowska
+subtitle: Analiza wariancji - sprawozdanie
+output:   
+  html_document:
+    theme: readable
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+# Termin Oddania: 22.05.2023 23:59:59
+
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(cache = TRUE, warning = TRUE, message = FALSE)
+library(tidyverse)  
+``` 
+
+# Zadanie 1
+
+Zarząd firmy "Firma na A", która zajmuje się, między innymi sprzedażą telefonów komórkowych zastanawia się nad zmianą szaty graficznej strony, na której można dokonać zakupu ich flagowego smartfona. Przygotowali dwie nowe szaty graficzne dla strony, jedna z dużym, prostokątnym, czerwonym guzikiem "kup teraz", druga z dużym, okrągłym, srebrnym guzikiem kup teraz. Za pomocą standardowej metodologii testu A/B/C kierowali z jednakowym prawdopodobieństwem nowych użytkowników na jedną z 3 stron. Przez 30 dni mierzyli co 6 godzin ilość sprzedanych sztuk smartfona dla każdej z wersji. Waszym zadaniem jest zbadanie za pomocą poznanych metod (analizy wariancji i jej różnych modyfikacji) odpowiedź na pytanie, czy nowe szaty graficzne miały wpływ na sprzedaż, a jeśli tak to która z szat jest najlepsza.
+
+Opis danych:
+
+version - 1 - stara, 2 - prostokąt, 3 - kółko
+
+sales - ilość sprzedanych sztuk
+
+```{r}
+sites <- readr::read_csv('zadanie1.csv')
+head(sites)
+```
+
+#Pomocnicza tabela do wskazania średnich
+```{r}
+means <- sites %>% group_by(version) %>% summarise(mean=mean(sales)) %>% mutate(n = 1:3) %>% print()
+```
+
+```{r}
+ggplot(sites, aes(x=version, y=sales, color=version)) + geom_jitter() + geom_segment(data=means,
+                                                                                            aes(x=n-0.2, xend=n+0.2, y=mean, yend=mean), linetype='solid', linewidth=2)
+```
+
+Przyglądając się wykresowi możemy wstępnie założyć, że nie ma powdów do obaw i możemy przystąpić do dalszej analizy. WWarto jednak zwrócić uwagę na wariancję wersji 1 i 3.
+
+```{r}
+ggplot(sites, aes(x=version, y=sales)) + geom_boxplot() + labs(title = "Wykres pudełkowy sprzedaży w zależności od wersji", x='Wersja', y='Sprzedaż')
+```
+
+Wykresy pudełkowe nie powodują żadnych obaw i możemy założyć, że rozkłady poszczególnych wersji sa normalne.
+
+```{r}
+knitr::opts_chunk$set(cache = TRUE, warning = TRUE, message = FALSE)
+summary(sites)
+```
+
+```{r}
+sites <- sites %>% dplyr::mutate(version = as.character(version))
+
+
+summary(aov(sales ~ version, data=sites))
+```
+
+Po przeprowadzeniu jednoczynnikowej analizy wariancji zwracamy uwagę na otrzymane p-value, odrzucamy hipotezę zerową o równych średnich. Dochodzimy zatem do wniosku, że wersja ma wpływ na sprzedaż, aby dowiedzieć się, która wersja jest "najlepsza" przprowadzimy procedurę Tukey'a.
+
+```{r}
+plot(TukeyHSD(aov(sales ~ version, data = sites)))
+```
+
+W celu lepszej interpretacji procedurę Tukey'a przedstawiamy na wykresie. Możemy stwierdzić, że wersja 2 miała najlepszy wpływ na sprzedaż smartfonów.
+
+# Zadanie 2
+
+Po waszym sukcesie dotyczącym wyboru szaty graficznej strony, zarząd "Firmy na A" postawił was przed kolejnym, trudniejszym zadaniem. Kolejną z branży, którą zajmuje się firma jest streaming video w internecie. Inżynierowie firmy stworzyli nową funkcjonalność autoodtwarzania, która ich zdaniem ma zwiększyć czas oglądania wideo podczas jednej sesji przez konkretnego użytkownika, a co za tym idzie zwiększyć przychody firmy z reklam. Ich zdaniem ta funkcjonalność szczególnie będzie działała na dzieci. Ponownie za pomocą metdologii testu A/B kierowali użytkowników z jednakowym prawdopodobieństwem na wersje strony z nowym odtwarzaczem lub ze starym. Za pomocą dwuczynnikowej analizy wariancji sprawdź, czy inżynierowie mieli racje.
+
+Opis danych:
+
+group - 1 - użytkownicy poniżej 16 roku życia, 2 - użytkownicy powyżej 16 roku życia, ale poniżej 40tego, 3 - użytkownicy powyżej 40 roku życia
+
+
+version - 1 - wersja ze starym odtwarzaczem, 2 - wersja z nowym odtwarzaczem
+
+
+time - czas w minutach spędzony na oglądaniu w danej sesji
+
+```{r}
+player <- readr::read_csv('zadanie2.csv')
+head(player)
+
+```
+
+```{r}
+ggplot(player, aes(x=group, y=time)) + geom_boxplot() + facet_wrap(~version)
+```
+
+Rysujemy wykresy pudełkowe, zakładamy normalność rozkładów poszczególnych grup dla obu wersji.
+
+```{r}
+player <- player %>% dplyr::mutate(group = as.character(group), version = as.character(version))
+
+summary(aov(time ~ group*version, data=player))
+```
+
+Po przeprowadzeniu dwuczynnikowej anlizy wariancji, dochodzimy do wniosku, że średnie dla grup wiekowych są różne co pozwala nam odrzucić hipoteze zerową, wersja natomiast nie ma istotnego wpływu na czas oglądania, tak samo nie istnieje istotna interakcja pomiedzy grupami a wersją strony.
+
+```{r}
+plot(TukeyHSD(aov(time ~ group, data = player)))
+```
+
+Przeprowadziliśmy procedurę Tukey'a tylko i wyłącznie dla grup ponieważ tylko tam odrzuciliśmy hipoteze zerową. Okazuje się, że rzeczywiście grupa użytkowników w wieku mniejszym niż 16 lat poświęca więcej czasu na oglądanie, jednak wersja nie ma istotnego znaczenia na to jak długo dzieci oglądaja materiał.
+
+# Zadanie 3
+
+Na podstawie waszej renomy zarząd "Firmy na A" powierzył wam najtrudniejsze do tej pory zadanie. Tym razem nie zdali wam bezpośrednio pytania, jedynie przedstawili dane, które zbierali inżynierowie odpowiedzialni za kolejną platformę firmy - dział przechowywania danych w chmurze. Platforma działa na zasadzie udostępniania darmowego miejsca z wolnym transferem i możliwości dokupowywania coraz większej ilości miejsca za pieniądze. Istnieje również subskrypcja, zwiększająca prędkość transferu. Waszym zadaniem jest - korzystając z przedstawionych danych przekazać do działu marketingu do jakiej grupy osób najlepiej skierować reklamy, aby kupowały dodatkowe miejsce w chmurze (wniosek wysnuć za pomocą analizy wariancji i jej uogólnień).
+
+Komentarz: Na potrzeby tego zadania przymujemy, że jeżeli osoba zajmuje dużo miejsca w swojej chmurze, to chętniej zapłaci za więcej miejsca (poprawność tego założenia samo w sobie jest ciekawym pytaniem, ale na ten moment nie zajmiemy się odpowiedzią na nie).
+
+
+Opis danych:
+
+sex - płeć
+
+paid - czy użytkownik posiada płatną subskrypcje, 0 - nie, 1 - tak
+
+agegrp - grupy wiekowe jak w zadaniu 2
+
+majoritydata - rodzaj danych zajmujących największą część miejsca posiadanego przez użytkownika, 1 - wideo, 2 - obrazy, 3 - muzyka, 4 - inne
+
+active - czy użytkownik był wgrywał jakieś pliki w przeciągu ostatnich 2 miesięcy, 0 - nie, 1 - tak
+
+used - ilość zajętego miejsca w chmurze (w GB)
+
+Przykład: Czy rodzaj danych przechowywanych przez użytkownika ma wpływ na ilość zajętego miejsca?
+
+
+```{r}
+storage <- readr::read_csv('zadanie3.csv')
+head(storage)
+```
+```{r}
+knitr::opts_chunk$set(cache = TRUE, warning = TRUE, message = FALSE)
+summary(storage)
+```
+
+```{r}
+ggplot(storage, aes(x=paid, y=used)) + geom_boxplot() + facet_wrap(~agegrp)
+```
+
+Wykresy wyglądają wystarczająco "normalnie" aby przystąpić do analizy wariancji. Warto jednak zwrócić uwagę na skośność, która występuje w każdym przypadku gdy paid przyjmuje wartość 1.
+
+```{r}
+
+storage <- storage %>% dplyr::mutate(majoritydata = as.character(majoritydata), sex = as.character(sex), active = as.character(active), agegrp = as.character(agegrp), paid = as.character(paid))
+
+
+summary(aov(used ~ paid*agegrp, data = storage))
+```
+
+Po przeprowadzeniu dwuczynnikowej analizy wariancji zauważamy, że wartość p-value w każdym przypadku jest mniejsza od założonego poziomu isttności (0.05) co świadczy o tym, że średnie pomiedzy grupami się róznią, co za tym idzie, odrzucamy hipoteze zerową. Możemy zatem dojść do wniosku, że to czy osoba płaci za serwis ma istotny wpływ na to ile używa miejscu na dysku, grupa wiekowa również ma na to wpływ oraz zachodzi interakcja pomiedzy grupą wiekową, a tym czy osoba ma wykupioną subskrypcje.
+
+
+#Przechodzimy do procedury Tukey'a
+```{r}
+knitr::opts_chunk$set(cache = TRUE, warning = TRUE, message = FALSE)
+TukeyHSD(aov(used ~ agegrp*paid, data = storage))
+```
+```{r}
+plot(TukeyHSD(aov(used ~ agegrp*paid, data = storage)))
+```
+
+Sugerując się komentarzem dochodzimy do wniosku, że grupą wiekową, do której najlepiej kierować reklamę jest grupa wiekowa 16-40, gdyż zajmuje najwięcej miejsca ze wszystkich grup. Warto jednak zauważyć i zastanowić się czy kierowanie do tej grupy reklam na pewno ma sens w tym celu dodaliśmy do naszej analizy wariancji zmienną "paid", można zauważyć ze istotna część osób zajmujących najwiekszą ilość miejsca na platformie ma juz wykupioną subskrypcje.
+
+
+
+
