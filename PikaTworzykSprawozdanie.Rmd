@@ -1,0 +1,350 @@
+---
+title: "Analiza Danych - Sprawozdanie 1"
+author: 
+  name: Adrian Kowalski
+  affiliation: Politechnika Krakowska
+subtitle: Rozkład Gamma
+output:
+  html_document:
+    df_print: paged
+---
+
+
+
+Proszę o wykonanie poniższych zadań w dwu- lub trzyosobowych grupach. Oceniane są przede wszystkim komentarze i wnioski, każdy wykres prosze dobrze opisać i skomentować. 
+
+Uwaga: Zadania oznaczone symoblem * są dodatkowe i można otrzymać za nie punkty za aktywność. 
+
+# Funkcja Gamma Eulera
+
+Funkcja Gamma jest jedną z pierwszych "nieelementarnych" (obok funkcji Gaussa) funkcji jakie poznajemy. W naturalny sposób uogólnia ona pojęcie silni na wszystkie liczby rzeczywiste dodatnie (a nawet zespolone) oprócz zera i ujemnych liczb całkowitych. Jest wiele sposobów jej definicji, najczęstszą (i z naszej perspektywy najbardziej użyteczną) będzie
+\[ \Gamma(x) = \int_0^\infty t^{x -1}e^{-t}dt, \, \rm{dla} x \in (0, \infty). \]
+
+Spoglądnijmy na kluczowe użyteczne własności (chociażby gdyby ktoś chciał wyprowadzić wzory na wartość oczekiwaną i wariancję rozkładu Gamma) tej funkcji.
+
+1. Dla dowolnego $x \in (0, \infty)$ zachodzi $\Gamma(x +1) = x \Gamma(x)$.
+2. $\Gamma(1)=1$.
+3. Dla dowolnego $n \in \mathbb{Z}_+$ zachodzi $\Gamma(n+1) = n!$.
+
+
+# Rozkład Gamma
+
+Zajmijmy się teraz ogólnym przypadkiem rozkładu Gamma. Z punktu widzenia zarówno czystej statystyki matematycznej jak i zastosowań w analizie danych jest to bardzo często występujący rozkład. Jego gęstość dana jest wzorem
+\[ f(x) = \frac{\lambda^k}{\Gamma(k)} x^{k - 1}e^{-\lambda x}, \, \rm{dla}\, x \in (0, \infty), \]
+gdzie $k >0$ oraz $\lambda > 0$ są parametrami. Szczególnym przypadkiem rozkładu Gamma jest rozkład Erlanga, gdzie $k \in \mathbb{Z}_+$. Wartość oczekiwana zmiennej o rozkładzie Gamma wynosi $\frac{k}{\lambda}$, a wariancja $\frac{k}{\lambda^2}$. 
+
+### Zadanie 1
+
+Wygeneruj 3 próby z rozkładu Gamma z wybranymi przez siebie (różnymi) parametrami $k, \lambda$. Porównaj otrzymane średnie i wariancje w próbach z wartościami teoretycznymi. Narysuj histogram każdej z prób i porównaj go z teoretyczną gęstością. Narysuj również teoretyczne dystrybuanty rozważanych zmiennych (najlepiej wszystkie 3 na jednym obrazku dla porównania).
+
+*Wykonaj wykresy pudełkowe prób (najlepiej wszystkie 3 na jednym obrazku).
+Podpowiedź: funkcja facet_wrap() w ggplot.
+
+Podpowiedź: Próbę z rozkładu Gamma generujemy za pomocą funkcji *rgamma()* gdzie *rate = $\lambda$* (lub *scale = $\frac{1}{\lambda}$*) oraz *shape = $k$*. Wartości gęstości rozkładu Gamma otrzymujemy za pomocą polecenia *dgamma()*.
+
+```{r}
+
+library(tidyverse)
+#install.packages("cowplot")
+
+library(cowplot)
+```
+
+Generujemy 3 próby rozkładu gamma korzystając z rgamma(), oraz przygotowujemy tibble do utworzenia histogramu:
+
+```{r}
+gamma_samples <- tibble(gamma1 = rgamma(1000, shape = 1, rate = 2), gamma2 = rgamma(1000,2,4), gamma3 = rgamma(1000,3,5)) %>% pivot_longer(c(1:3), names_to = 'sample')
+```
+
+Używajac mean() oraz var() obliczamy średnią oraz wariancję uzyskanych danych z prób, które zapisujemy w tibble:
+
+```{r}
+gamma_properties <- gamma_samples %>% group_by(`sample`) %>% summarise(gamma_mean = mean(`value`), gamma_variance = var(`value`)) %>% mutate(gamma_theoritical_mean = c(1/2, 2/4, 3/5), gamma_theoritical_variance = c(1/2**2, 2/4**2, 3/5**2)) %>% relocate(gamma_variance, .after = gamma_theoritical_mean) %>% print()
+```
+
+Tworzymy wykresy histogramów za pomocą ggplot, korzystając z facet_wrap łączymy wykresy w jeden obraz:
+
+```{r}
+ggplot(gamma_samples, aes(x = value)) + geom_histogram(bins = 30) + facet_wrap(~sample) + ggtitle("Histogramy rozkładów gamma") + theme(plot.title = element_text(hjust = 0.5))
+```
+<br />
+Tworzymy teoretyczne gęstości rozkładów gamma z parametrami z poprzedniego podpunktu używając dgamma():
+
+```{r}
+gamma_densities <- tibble(interval =seq(0,4, 0.1)) %>% mutate(gamma1 = dgamma(interval, 1,2), gamma2 = dgamma(interval,2,4), gamma3 = dgamma(interval,3,5)) %>% pivot_longer(c(2:4), names_to = 'dens')
+```
+
+Korzystając z ggplot, oraz facet_wrap przedstawiamy gęstości na osobnych wykresach:
+
+```{r}
+ggplot(gamma_densities, aes(x = interval, y = value)) + geom_line() + facet_wrap(~dens) +  ggtitle("Teoretyczne gęstości gamma") + theme(plot.title = element_text(hjust = 0.5))
+```
+<br />
+Tworzymy teoretyczne dystrybuanty rozkładów gamma z parametrami z poprzednich podpunktów używajać pgamma():
+
+```{r}
+gamma_dists <- tibble(interval =seq(0,4, 0.1)) %>% mutate(gamma1 = pgamma(interval, 1,2), gamma2 = pgamma(interval,2,4), gamma3 = pgamma(interval,3,5)) %>% pivot_longer(c(2:4), names_to = 'dist')
+```
+
+Rysujemy wykresy dystrybuant:
+
+```{r}
+ggplot(gamma_dists, aes(x = interval, y = value)) + geom_line()+ facet_wrap(~dist) + ggtitle("Teoretyczne dystrybuanty gamma") + theme(plot.title = element_text(hjust = 0.5))
+```
+<br />
+Tworzymy wykresy pudełkowe prób używając geom_boxplot(), oraz coord_flip() dla przejstości: 
+
+```{r}
+ggplot(gamma_samples, aes(x = value)) + geom_boxplot()+ facet_wrap(~sample) + coord_flip() + ggtitle("Wykresy pudełkowe gamma") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+### Zadanie 2
+
+Zweryfikuj empirycznie (np. za pomocą wykresu gęstości), że rozkład wykładniczy z parametrem $\lambda$ jest szczególnym przypadkiem rozkładu Gamma z parametrami $\lambda$ i $k=1$.
+
+
+
+<br />
+Tworzymy gęstości rozkładów gamma oraz wykładniczego z korepondującym parametrem $\lambda = 3$, oraz w $k = 1$:
+
+```{r}
+gamma_exponential_densities_comparison <- tibble(interval =seq(0,4, 0.1)) %>% mutate(gamma = dgamma(interval, rate = 3, 1), exponential = dexp(interval,3)) %>% pivot_longer(c(2:3), names_to = 'dens')
+
+```
+
+Rysujemy wykresy gęstości dla porównania: 
+
+```{r}
+ggplot(gamma_exponential_densities_comparison, aes(x = interval, y = value)) + facet_wrap(~dens) + geom_line() + ggtitle("Porównanie gęstości") + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+<br />
+Tworzymy próby rozkładu wykładniczego z parametrem $\lambda = 3$ oraz gamma z parametrami $\lambda = 3$ oraz $k = 1$ w celu utworzenia histogramów:
+
+```{r}
+
+gamma_exponential_histograms_comparison <- tibble(gamma = rgamma(1000, rate = 3, 1), exponential = rexp(1000,3)) %>% pivot_longer(c(1:2), names_to = 'hist')
+
+```
+
+Rysujemy histogramy: 
+
+```{r}
+
+ggplot(gamma_exponential_histograms_comparison, aes(x = value)) + geom_histogram(bins = 30) + facet_wrap(~hist) + ggtitle("Porównanie histogramów") + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+<br />
+Funkcja, która porówna histogramy dla dowolnego parametru $\lambda > 0$ 
+
+```{r}
+
+zadanie_2 <- function(l){
+  if (l>0) {
+      gamma_exponential_histograms_comparison <- tibble(gamma = rgamma(10000, rate = l, 1), exponential = rexp(10000,l)) %>% pivot_longer(c(1:2), names_to = 'hist')
+  ggplot(gamma_exponential_histograms_comparison, aes(x = value)) + geom_histogram(bins = 30) + facet_wrap(~hist) + ggtitle("Porównanie histogramów") + theme(plot.title = element_text(hjust = 0.5))
+  } else{
+    print("Parametr musi być większy od 0")
+  }
+
+}
+
+```
+
+```{r}
+zadanie_2(100)
+```
+
+
+
+### Zadanie 3
+
+Zweryfikuj empirycznie (np. za pomocą wykresów gęstości), że suma $k$ niezależnych zmiennych o rozkładzie wykładniczym z tym samym parametrem $\lambda$ ma rozkład Gamma z parametrami $\lambda$, $k$.
+
+
+Tworzymy sumę 10 niezależnych prób zmiennych o rozkładzie wykładniczym z parametrem $\lambda = 3$:
+
+```{r}
+
+exp_sum <- 0
+
+for (i in c(1:10) ){
+  exp_sum = exp_sum + rexp(100000,3)
+}
+
+```
+
+Dodajemy sumę prób rozkładów wykładniczych do tibble, oraz tworzymy próbę gamma z parametrami $\lambda = 3$ oraz $k = 10$:
+
+```{r}
+exp_sum_density <- tibble(val = exp_sum) 
+
+gamma_sample_z3 <- tibble(val = rgamma(100000, shape =  10, rate = 3))
+```
+
+Przygotowujemy dane do wykresu: 
+
+```{r}
+
+exp_sum_density_gamma_density_compared <- tibble(gamma = gamma_sample_z3$val, exp_sum = exp_sum_density$val) %>% pivot_longer(c(1:2), names_to = "density")
+
+```
+
+Rysujemy wykresy gęstości używając geom_density():
+
+```{r}
+
+ggplot(data = exp_sum_density_gamma_density_compared, aes(x = value)) +  facet_wrap(~density) + geom_density() + ggtitle("Porównanie gęstości") + theme(plot.title = element_text(hjust = 0.5))
+
+```
+<br />
+Rysujemy wykresy histogramów:
+
+```{r}
+ggplot(data = exp_sum_density_gamma_density_compared, aes(x = value)) +  facet_wrap(~density) + geom_histogram() + ggtitle("Porównanie histogramów") + theme(plot.title = element_text(hjust = 0.5))
+```
+<br />
+Funkcja porównująca wykresy gęstości (przy użyciu geom_density() oraz geom_histogram()) dla dowolnych parametrów $\lambda$ oraz $k$
+
+```{r}
+
+
+zadanie_3 <- function(l, k){
+  if (l > 0 && k > 0) {
+    
+    exp_sum <- 0
+
+    for (i in c(1:k) ){
+      exp_sum = exp_sum + rexp(100000,l)
+    }
+    
+    exp_sum_density_gamma_density_compared <- tibble(gamma = rgamma(100000, shape =  k, rate = l), exp_sum = exp_sum) %>% pivot_longer(c(1:2), names_to = "density")
+    
+     plot1 <- ggplot(data = exp_sum_density_gamma_density_compared, aes(x = value)) +  facet_wrap(~density) + geom_density() + ggtitle("Porównanie gęstości") + theme(plot.title = element_text(hjust = 0.5))
+    plot2 <- ggplot(data = exp_sum_density_gamma_density_compared, aes(x = value)) +  facet_wrap(~density) + geom_histogram() + ggtitle("Porównanie histogramów") + theme(plot.title = element_text(hjust = 0.5))
+    plot_grid(plot1, plot2, labels = "")
+
+  }
+  else{ print("Parametry muszą być dodatnie")  }
+}
+
+
+```
+
+```{r}
+zadanie_3(3,24)
+```
+
+
+
+
+### Zadanie 4
+
+Zweryfikuj empirycznie (np. za pomocą wykresów gęstości) stwierdzenie, że jeżeli zmienna $X$ ma rozkład Gamma z parametrami $\lambda$,$k$, to zmienna $cX$ (dla pewnego $c>0$) ma rozkład Gamma o parametrach $ \frac{\lambda}{c}$, $k$. 
+
+Tworzymy probę zmiennej losowej X o rozkładzie Gamma z parameterami $k = 5$ i $\lambda = 3$:
+```{r}
+#k shape lambda rate
+gamma_X <- tibble(val = rgamma(100000, rate = 3, shape = 5))
+```
+
+Ustalamy $c = 10$ i tworzymy zmienna cX:
+```{r}
+gamma_cX <- gamma_X %>% mutate(val = 10*val)
+```
+
+Tworzymy próbę o parametrach $\frac{\lambda}{c} = \frac{3}{10}$ i $k = 5$:
+```{r}
+gamma_check <- tibble(val = rgamma(100000, rate = 3/10, shape = 5)) 
+```
+
+Tworzymy tabele z wartościami zmiennej cX i gamma_check:
+```{r}
+gamma_density_check<- tibble(gamma_cX = gamma_cX$val, gamma = gamma_check$val) %>% pivot_longer(c(1:2), names_to = "density")
+```
+
+Rysujemy wykresy:
+```{r}
+ggplot(data = gamma_density_check, aes(x = value)) +  facet_wrap(~density) + geom_density() + ggtitle("Porównanie gęstości") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+<br />
+Tworzymy funkcję na podstawie zadania 4 (dodatkowo uwzględniamy histogramy):
+```{r}
+zadanie_4 <- function(l,k,c){
+  if (l > 0 && k > 0 && c>0) {
+    
+    
+    
+    zadanie_4_tibble <- tibble(gamma_cX = c*rgamma(10000, rate = l, shape = k), gamma = rgamma(10000, rate = l/c, shape = k)) %>% pivot_longer(c(1:2), names_to = "density")
+    
+     plot1 <- ggplot(data = zadanie_4_tibble, aes(x = value)) +  facet_wrap(~density) + geom_density() + ggtitle("Porównanie gęstości") + theme(plot.title = element_text(hjust = 0.5))
+    plot2 <- ggplot(data = zadanie_4_tibble, aes(x = value)) +  facet_wrap(~density) + geom_histogram() + ggtitle("Porównanie histogramów") + theme(plot.title = element_text(hjust = 0.5))
+    plot_grid(plot1, plot2, labels = "")
+
+  }
+  else{ print("Parametry muszą być dodatnie")  }
+}
+```
+
+
+```{r}
+zadanie_4(3,5,10)
+```
+
+
+
+### Zadanie 5*
+
+Porównaj próby z rozkładu Gamma z ustalonym parametrem $\lambda$ i *dużymi* parametrami $k$ (proponuje $k > 50$) i próby z rozkładu normalnego ze średnią $\frac{k}{\lambda}$ i wariancją $\frac{k}{\lambda^2}$.
+
+Tworzymy próbę o rozkładzie Gamma i parametrach $\lambda = 133$, $k = 120$ oraz rozkładzie normalnym ze średnia $\frac{k}{\lambda} = \frac{120}{133}$ i wariancją $\frac{k}{\lambda^2} = \frac{120}{133^2}$:
+```{r}
+
+gamma_sample <- tibble(val = rgamma(100000, rate = 133, shape = 120))
+gauss_sample <- tibble(val = rnorm(100000, mean = 120/133, sd = sqrt(120/133^2)))
+```
+
+Tworzymy tabelę z wartościami gamma_sample oraz gauss_sample:
+```{r}
+check<- tibble(gamma = gamma_sample$val, gauss = gauss_sample$val) %>% pivot_longer(c(1:2), names_to = "density")
+```
+
+Rysujemy wykresy gęstości:
+```{r}
+ggplot(data = check, aes(x = value)) +  facet_wrap(~density) + geom_density() + ggtitle("Porównanie gęstości") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+Tworzymy funkcję na podstawie zadania 5 (dodatkowo uwzględniamy histogramy):
+```{r}
+zadanie_5 <- function(l,k){
+  if (l > 0 && k > 0) {
+    
+    
+    
+    zadanie_5_tibble <- tibble(gamma = rgamma(100000, rate = l, shape = k), gauss = rnorm(100000, mean = k/l, sd = sqrt(k/l^2))) %>% pivot_longer(c(1:2), names_to = "density")
+    
+    plot1 <- ggplot(data = zadanie_5_tibble, aes(x = value)) +  facet_wrap(~density) + geom_density() + ggtitle("Porównanie gęstości") + theme(plot.title = element_text(hjust = 0.5))
+    plot2 <- ggplot(data = zadanie_5_tibble, aes(x = value)) +  facet_wrap(~density) + geom_histogram() + ggtitle("Porównanie histogramów") + theme(plot.title = element_text(hjust = 0.5))
+    plot_grid(plot1, plot2, labels = "")
+
+  }
+  else{ print("Parametry muszą być dodatnie")  }
+  
+}
+```
+
+
+```{r}
+zadanie_5(1330,120)
+```
+
+
+
+
+
+
